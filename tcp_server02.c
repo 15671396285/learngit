@@ -46,13 +46,14 @@ void handle_sigint(int sig)
  * @note
  */
 
+//线程交互函数，封装接受消息和发送消息的功能
 void *IO_Client(void *args)
 {
     // 用于传入的是void* 需要强转才能正确指向
     ClientArgs_t *client_args = (ClientArgs_t *)args;
     fd_set read_fd;
     int max_fd = client_args->sock_fd > STDIN_FILENO ? client_args->sock_fd : STDIN_FILENO;
-    while (!stop) // 信号处理，以便更优雅地退出程序。
+    while (!stop) 
     {
         FD_ZERO(&read_fd);
         FD_SET(client_args->sock_fd, &read_fd);
@@ -93,6 +94,7 @@ void *IO_Client(void *args)
             //fgets会自动清空缓冲区并写入数据
 			fgets(client_args->Buffer, sizeof(client_args->Buffer), stdin);  	
             size_t len = strlen(client_args->Buffer);
+            //忽略只输入回车的情况
         	if(len == 1 && client_args->Buffer[len - 1] == '\n')
 				continue;
             if(!strncmp(client_args->Buffer, "exit", 4))
@@ -107,8 +109,8 @@ void *IO_Client(void *args)
             }
         }
     }
-    free(client_args);
     close(client_args->sock_fd); // 关闭与该客户端的链接
+    free(client_args);
     pthread_exit(NULL);             // 退出子线程
 }
 
@@ -131,7 +133,7 @@ int main(int argc, char const *argv[])
         fprintf(stderr, "tcp套接字打开错误, errno:%d, %s\n", errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
-    /************END*************/
+    /************第一步END*************/
 
     /************第二步: 将套接字描述符与端口绑定************/
 
@@ -151,7 +153,7 @@ int main(int argc, char const *argv[])
         close(tcp_socket);
         exit(EXIT_FAILURE);
     }
-    /************END*************/
+    /************第二步END*************/
 
     /************第三步: 设置监听信息************/
     // 3.设置监听  队列最大容量是5
@@ -162,7 +164,7 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE);
     }
     printf("服务器开始运行, 监听的端口号为：%d\n", atoi(argv[1]));
-    /************END*************/
+    /************第三步END*************/
 	
 	
     while (!stop)
@@ -181,13 +183,13 @@ int main(int argc, char const *argv[])
             perror("接受连接失败, 队列异常");
             continue;
         }
-        	printf("已经从队列出取出一个请求, 连接成功\n");
+        printf("已经从队列出取出一个请求, 连接成功\n");
 
         // 此时得到该客户端的新套接字
         
-        /************END*************/
+        /************第四步END*************/
 
-        /*********************创建接收线程********************/
+        /*********************第五步：创建接收线程********************/
         // 子线程专属 客户端信息结构体
         ClientArgs_t *client_args = (ClientArgs_t *)malloc(sizeof(ClientArgs_t));
         if (client_args == NULL)
@@ -207,12 +209,12 @@ int main(int argc, char const *argv[])
         // 将客户端IP信息结构体信息传入线程
         if (pthread_create(&pid, NULL, IO_Client, (void *)client_args) != 0)
         {
-            fprintf(stderr, "创建接收线程错误, errno:%d, %s\n", errno, strerror(errno));
+            fprintf(stderr, "创建交互线程错误, errno:%d, %s\n", errno, strerror(errno));
             close(connect_fd); // 关闭对客户端套接字
             free(client_args);
         }
         pthread_detach(pid); // 线程分离 主要目的是使得线程在终止时能够自动释放其占用的资源，而不需要其他线程显式地调用 pthread_join 来清理它。
-        /************END*************/
+        /************第五步END*************/
 
     }
     close(tcp_socket);
