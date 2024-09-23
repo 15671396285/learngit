@@ -36,18 +36,26 @@ void *receive_from_server(void *arg)
     {
         memset(buf, 0, sizeof(buf));
         ssize_t bytes_received = recv(tcp_socket_fd, buf, sizeof(buf) - 1, 0);
+        // puts("");
         if (bytes_received > 0)
         {
             printf("从服务器接收到数据: %s\n", buf);
         }
-        else if (bytes_received == 0)
-        {
-            printf("服务器断开连接\n");
-            break;
-        }
+        // else if (bytes_received == 0)
+        // {
+        //     printf("服务器断开连接\n");
+        //     break;
+        // }
+        // else
+        // {
+        //     perror("接收错误");
+        //     break;
+        // }
         else
         {
-            perror("接收错误");
+            if(bytes_received == 0) printf("服务器断开连接\n");
+            else perror("接受错误");
+            close(tcp_socket_fd);   //客户端也要释放套接字，避免进入CLOSE_WAIT状态
             break;
         }
     }
@@ -70,7 +78,7 @@ int main(int argc, char const *argv[])
         fprintf(stderr, "tcp socket error,errno:%d,%s\n", errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
-    /************END*************/
+    /************第一步END*************/
 
     /************第二步: 调用connect连接远端服务器************/
     struct sockaddr_in server_addr; // 服务器IP信息结构体
@@ -89,7 +97,7 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE);
     }
     printf("服务器连接成功...\n\n");
-    /************END*************/
+    /************第二步END*************/
 
     /************第三步: 向服务器发送数据************/
 
@@ -111,15 +119,12 @@ int main(int argc, char const *argv[])
         memset(buf, 0, sizeof(buf));
         // 接收客户端输入的字符串数据
         printf("请输入要发送的字符串: ");
-		fflush(stdout);
         
-		if(fgets(buf, sizeof(buf), stdin) == NULL)
+        if (fgets(buf, sizeof(buf), stdin) == NULL)
         {
             perror("fgets error");
             break;
         }
-		size_t len = strlen(buf);
-		if(len == 1 && buf[len - 1] == '\n') continue;
 
         // 将用户输入的数据发送给服务器
         ret = send(tcp_socket_fd, buf, strlen(buf), 0);
@@ -133,7 +138,7 @@ int main(int argc, char const *argv[])
         if (strncmp(buf, "exit", 4) == 0)
             break;
     }
-    /************END*************/
+    /************第三步END*************/
     close(tcp_socket_fd);
     printf("客户端程序结束\n");
     exit(EXIT_SUCCESS);
