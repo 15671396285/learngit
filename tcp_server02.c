@@ -31,12 +31,16 @@ typedef struct
     char Buffer[BUF_SIZE]; // 收发数据缓冲区
 } ClientArgs_t;
 
+//设为全局变量是为了保证ctrl+c能退出服务器，不会被下文的while循环中的accept阻塞
+int tcp_socket;         // 声明服务器监听的套接字作为全局变量
 volatile sig_atomic_t stop = 0; // volatile类型表示随时可变的信号量
 
 // 信号处理程序，当接收到 SIGINT 信号时（通常是按下 Ctrl+C），它将 stop 变量设置为 1。
 void handle_sigint(int sig)
 {
     stop = 1;
+    close(tcp_socket);
+    printf("服务器正在关闭...\n");
 }
 
 /**
@@ -53,7 +57,7 @@ void *IO_Client(void *args)
     ClientArgs_t *client_args = (ClientArgs_t *)args;
     fd_set read_fd;
     int max_fd = client_args->sock_fd > STDIN_FILENO ? client_args->sock_fd : STDIN_FILENO;
-    while (!stop) 
+    while (true)
     {
         FD_ZERO(&read_fd);
         FD_SET(client_args->sock_fd, &read_fd);
@@ -110,8 +114,8 @@ void *IO_Client(void *args)
         }
     }
     close(client_args->sock_fd); // 关闭与该客户端的链接
-    free(client_args);
-    pthread_exit(NULL);             // 退出子线程
+    free(client_args);           //注意先close在free，不然会导致进程CLOSE_WAIT状态
+    pthread_exit(NULL);          // 退出子线程
 }
 
 int main(int argc, char const *argv[])
@@ -127,7 +131,7 @@ int main(int argc, char const *argv[])
     
 	/************第一步: 打开套接字, 得到套接字描述符************/
     // 1.创建TCP套接字
-	int tcp_socket = socket(AF_INET, SOCK_STREAM, 0);   //参数含义：ipv4 tcp
+    tcp_socket = socket(AF_INET, SOCK_STREAM, 0);   //参数含义：ipv4 tcp
     if (tcp_socket == -1)
     {
         fprintf(stderr, "tcp套接字打开错误, errno:%d, %s\n", errno, strerror(errno));
@@ -179,7 +183,8 @@ int main(int argc, char const *argv[])
 		int connect_fd = accept(tcp_socket, (struct sockaddr *)&client, &client_len); // 会阻塞
         if (connect_fd < 0)
         {
-            if (errno == EINTR) continue;
+            //if (errno == EINTR) continue;
+            if(errno == EBADF && stop) break;   //判断套接字关闭，并且信号中断
             perror("接受连接失败, 队列异常");
             continue;
         }
